@@ -4,6 +4,7 @@ import pdfplumber
 import spacy
 from spacy.pipeline import EntityRuler
 import json
+import re
 
 from PATTERNS_SpaCy import COMPOSED_PATTERNS, PRIMARY_PATTERNS
 
@@ -136,3 +137,76 @@ def process_folder_separate_json(input_folder: str, output_folder: str):
 
 
 #=======================================================================================================================
+
+#====================
+
+def process_txt_and_truncate(input_dir: str,
+                             json_dir: str,
+                             output_dir: str):
+    """
+    For each .txt file in input_dir:
+      1. Load corresponding .json and get the 'despacho' field from the first record.
+      2. Read the .txt file.
+      3. Count how many times the despacho appears.
+      4. If it appears at least twice, truncate the text before the 2nd occurrence.
+      5. Save result to output_dir with same filename.
+      6. Print filename, despacho, count, and action taken.
+
+      Resume: Deletes the header of the pdf.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    for filename in sorted(os.listdir(input_dir)):
+        if not filename.lower().endswith(".txt"):
+            continue
+
+        base = os.path.splitext(filename)[0]
+        json_path = os.path.join(json_dir, base + ".json")
+
+        # 1) Load first despacho from JSON list
+        try:
+            with open(json_path, "r", encoding="utf-8") as jf:
+                data = json.load(jf)
+
+            if isinstance(data, list) and data and "despacho" in data[0]:
+                key = data[0]["despacho"]
+            else:
+                key = None
+
+        except (FileNotFoundError, json.JSONDecodeError):
+            key = None
+
+        print(f"\n== {filename} ==")
+        if not key:
+            print("  (no despacho key found in JSON)")
+            continue
+        print(f"  Despacho key: {key!r}")
+
+        # 2) Read text
+        txt_path = os.path.join(input_dir, filename)
+        with open(txt_path, "r", encoding="utf-8") as tf:
+            text = tf.read()
+
+        # 3) Count occurrences
+        count = text.count(key)
+        print(f"  Occurrences: {count}")
+
+        truncated = text
+        truncated_flag = False
+
+        # 4) Truncate before second occurrence if needed
+        if count >= 2:
+            first_pos = text.find(key)
+            second_pos = text.find(key, first_pos + len(key))
+            if second_pos != -1:
+                truncated = text[second_pos:]
+                truncated_flag = True
+
+        # 5) Write out
+        out_path = os.path.join(output_dir, filename)
+        with open(out_path, "w", encoding="utf-8") as out_f:
+            out_f.write(truncated)
+
+        # 6) Report
+        status = "truncated" if truncated_flag else "unchanged"
+        print(f"  Action: {status} (written to {out_path})")

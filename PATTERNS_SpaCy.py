@@ -1,3 +1,6 @@
+import re
+
+
 # === Custom Entity Patterns ===
 PRIMARY_PATTERNS = [
     {"label": "SUM", "pattern": [{"TEXT": "Sumário"}, {"TEXT": ":", "OP": "!"}]},
@@ -68,9 +71,6 @@ PRIMARY_PATTERNS = [
 
         ]
     },
-
-
-
     {
         "label": "HEADER_DATE",
         "pattern": [
@@ -152,3 +152,31 @@ COMPOSED_PATTERNS = [
 
 ]
 
+# Define Portuguese month names for the date pattern
+a_months = [
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
+]
+MONTHS = r"|".join(a_months)
+
+# Regex to match the full header block (multiline):
+#   • number - letter + date + newline + Número <digits>
+#   • date + letter - number + newline + Número <digits>
+#   • number + date + newline + Número <digits>
+#   • date + number + newline + Número <digits>
+HEADER_BLOCK_PATTERN = re.compile(
+    rf'''(?mx)                           # multiline, verbose
+    (                                   # capture group for full block
+      (?:                               # non-capturing group for header formats
+        \d+\s*-\s*[A-Za-z]\s+\d+\s+de\s+(?:{MONTHS})\s+de\s+\d{{4}}      # number - letter + date
+        |                               # OR
+        \d+\s+de\s+(?:{MONTHS})\s+de\s+\d{{4}}\s+[A-Za-z]\s*-\s*\d+      # date + letter - number
+        |                               # OR
+        \d+\s+\d+\s+de\s+(?:{MONTHS})\s+de\s+\d{{4}}                       # number + date
+        |                               # OR
+        \d+\s+de\s+(?:{MONTHS})\s+de\s+\d{{4}}\s+\d+                       # date + number
+      )
+      \r?\n                            # newline
+      Número\s+\d+                    # 'Número ' + digits
+    )'''
+)
