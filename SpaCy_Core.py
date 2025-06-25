@@ -1,12 +1,12 @@
 import os
 import pdfplumber
-
+from pathlib import Path
 import spacy
 from spacy.pipeline import EntityRuler
 import json
 import re
 
-from PATTERNS_SpaCy import COMPOSED_PATTERNS, PRIMARY_PATTERNS
+from PATTERNS_SpaCy import COMPOSED_PATTERNS, PRIMARY_PATTERNS, HEADER_BLOCK_PATTERN
 
 
 nlp = spacy.load("pt_core_news_lg")
@@ -210,3 +210,42 @@ def process_txt_and_truncate(input_dir: str,
         # 6) Report
         status = "truncated" if truncated_flag else "unchanged"
         print(f"  Action: {status} (written to {out_path})")
+
+
+def remove_text_after_last_header_block(directory_path: str, recurse: bool = False) -> None:
+    """
+    For each .txt file in the directory, finds the last occurrence of the header block
+    (as defined by HEADER_BLOCK_PATTERN) and truncates the file content immediately
+    after that block, removing any text that follows.
+    """
+    pattern = "**/*.txt" if recurse else "*.txt"
+    for filepath in Path(directory_path).glob(pattern):
+        if not filepath.is_file():
+            continue
+        text = filepath.read_text(encoding="utf-8")
+        matches = list(HEADER_BLOCK_PATTERN.finditer(text))
+        if not matches:
+            continue  # no header block, leave file unchanged
+        last_match = matches[-1]
+        end_pos = last_match.end()
+        truncated = text[:end_pos]
+        # Overwrite file with truncated content
+        filepath.write_text(truncated, encoding="utf-8")
+        print(f"Truncated {filepath.name} after last header block.")
+
+def remove_all_header_blocks(directory_path: str, recurse: bool = False) -> None:
+    """
+    For each .txt file in the directory, removes all occurrences of the header block
+    (as defined by HEADER_BLOCK_PATTERN) from the file content.
+    """
+    pattern = "**/*.txt" if recurse else "*.txt"
+    for filepath in Path(directory_path).glob(pattern):
+        if not filepath.is_file():
+            continue
+        text = filepath.read_text(encoding="utf-8")
+        # Remove all header blocks
+        cleaned_text = HEADER_BLOCK_PATTERN.sub('', text)
+        # Overwrite file if changes were made
+        if cleaned_text != text:
+            filepath.write_text(cleaned_text, encoding="utf-8")
+            print(f"Removed all headers in {filepath.name}.")

@@ -1,4 +1,4 @@
-from SpaCy_Core import extract_text_from_pdf, process_folder_separate_json, process_txt_and_truncate
+from SpaCy_Core import extract_text_from_pdf, process_folder_separate_json, process_txt_and_truncate, remove_text_after_last_header_block, remove_all_header_blocks
 import os
 
 if __name__ == "__main__":
@@ -19,5 +19,8 @@ if __name__ == "__main__":
     # Step 3: Deletes the first page of the doc
     process_txt_and_truncate(text_unprocessed_folder, json_output_folder, text_processed_folder)
 
+    remove_text_after_last_header_block(text_processed_folder, True)
+
+    remove_all_header_blocks(text_processed_folder, True)
 
     print("\n✅ Process completed.")
