@@ -2,17 +2,27 @@ import spacy
 from spacy.pipeline import EntityRuler
 from pathlib import Path
 from patterns.patterns_spacy import COMPOSED_PATTERNS, PRIMARY_PATTERNS
+import os
+
 _nlp = None
 
 def get_nlp():
     global _nlp
     if _nlp is None:
         _nlp = spacy.load("pt_core_news_lg")
-        ruler1 = _nlp.add_pipe("entity_ruler", before="ner")
-        ruler1.add_patterns(COMPOSED_PATTERNS)
-        ruler2 = _nlp.add_pipe("entity_ruler", after="ruler1")
-        ruler2.add_patterns(PRIMARY_PATTERNS)
+
+        # Only add custom ruler if it doesn't exist
+        if "ruler_composed" not in _nlp.pipe_names:
+            ruler_composed = _nlp.add_pipe("entity_ruler", name="ruler_composed", before="ner")
+            from patterns.patterns_spacy import COMPOSED_PATTERNS
+            ruler_composed.add_patterns(COMPOSED_PATTERNS)
+
+        if "ruler_primary" not in _nlp.pipe_names:
+            ruler_primary = _nlp.add_pipe("entity_ruler", name="ruler_primary", after="ruler_composed")
+            from patterns.patterns_spacy import PRIMARY_PATTERNS
+            ruler_primary.add_patterns(PRIMARY_PATTERNS)
     return _nlp
+
 
 def extract_all_despachos(doc, filename, folder_path) -> list:
     results = []
@@ -31,7 +41,7 @@ def extract_all_despachos(doc, filename, folder_path) -> list:
             record = {
                 "despacho": ent.text.replace("\n", "").strip(),
                 "summary": "",
-                "secretaria": current_secretaria,
+                "secretaria": current_secretaria.replace("\n", " ").strip(),
                 "PDF": filename,
                 "path": os.path.join(folder_path, filename),
                 "TEXT": "",
