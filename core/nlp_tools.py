@@ -1,8 +1,7 @@
 import spacy
 from spacy.pipeline import EntityRuler
-from patterns.patterns_spacy import COMPOSED_PATTERNS, PRIMARY_PATTERNS
 from pathlib import Path
-
+from patterns.patterns_spacy import COMPOSED_PATTERNS, PRIMARY_PATTERNS
 _nlp = None
 
 def get_nlp():
