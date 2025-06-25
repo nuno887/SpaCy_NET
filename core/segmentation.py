@@ -5,9 +5,8 @@ from pathlib import Path
 
 def process_all_txt_and_json(json_dir: str, txt_dir: str, root_output: str = 'DATA/RELATORIOS') -> None:
     """
-    Pairs .json and .txt files by name, splits .txt by 'despacho' headers,
-    updates JSON with 'path' only, saves segments to DATA/RELATORIOS.
-    Does NOT touch 'summary', 'TEXT', or 'ANEXO'.
+    Splits each .txt by 'despacho' headers, creates a folder per despacho,
+    saves full block and split sections, updates JSON with paths and fields.
     """
     json_path = Path(json_dir)
     txt_path = Path(txt_dir)
@@ -63,17 +62,80 @@ def process_all_txt_and_json(json_dir: str, txt_dir: str, root_output: str = 'DA
                 continue
 
             safe_name = re.sub(r'[\\/:*?"<>| ]', '_', header)
-            segment_path = file_dir / f"{safe_name}.txt"
-            segment_path.write_text(segment_text, encoding='utf-8')
+            despacho_dir = file_dir / safe_name
+            despacho_dir.mkdir(parents=True, exist_ok=True)
+
+            # Save full block
+            (despacho_dir / "completo.txt").write_text(segment_text, encoding="utf-8")
+
+            # Split sections
+            sections = split_despacho_sections(segment_text)
+            (despacho_dir / "sumario.txt").write_text(sections["summary"], encoding="utf-8")
+            (despacho_dir / "texto.txt").write_text(sections["texto"], encoding="utf-8")
+            (despacho_dir / "anexo.txt").write_text(sections["anexo"], encoding="utf-8")
 
             for entry in data:
                 if entry.get("despacho") == header:
-                    relative_path = Path(root_output) / tfile.stem / f"{safe_name}.txt"
+                    relative_path = Path(root_output) / tfile.stem / safe_name
+
                     entry["path"] = str(relative_path).replace("\\", "/")
-                    print(f"[{tfile.name}] Updated path for '{header}'")
+                    entry["summary_path"] = str(relative_path / "sumario.txt").replace("\\", "/")
+                    entry["texto_path"] = str(relative_path / "texto.txt").replace("\\", "/")
+                    entry["anexo_path"] = str(relative_path / "anexo.txt").replace("\\", "/")
+
+                    # Remove inline large text fields to keep JSON clean
+                    entry.pop("summary", None)
+                    entry.pop("TEXT", None)
+                    entry.pop("ANEXO", None)
+
+                    print(f"[{tfile.name}] Updated paths for '{header}'")
 
         try:
             jfile.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
             print(f"✅ JSON updated: {jfile.name}")
         except Exception as e:
             print(f"Error writing JSON {jfile}: {e}")
+
+import re
+
+def split_despacho_sections(segment_text):
+    """
+    Splits a despacho block strictly by:
+    - 'Sumário:' (case-insensitive, requires colon)
+    - 'Texto:'   (case-insensitive, requires colon)
+    - 'ANEXO'    must be all caps, at line start, followed by newline
+    Ensures section headers are not included inside the extracted text.
+    """
+    result = {"summary": "", "texto": "", "anexo": ""}
+
+    # Patterns
+    sum_pattern = re.compile(r'Sumário\s*:', re.IGNORECASE)
+    text_pattern = re.compile(r'Texto\s*:', re.IGNORECASE)
+    anexo_pattern = re.compile(r'(?m)^ANEXO\s*$', re.IGNORECASE)  # Must be at start of line, all caps
+
+    sum_match = sum_pattern.search(segment_text)
+    text_match = text_pattern.search(segment_text)
+    anexo_match = anexo_pattern.search(segment_text)
+
+    # Positions
+    sum_start = sum_match.end() if sum_match else None
+    text_start = text_match.start() if text_match else None
+    text_content_start = text_match.end() if text_match else None
+    anexo_start = anexo_match.start() if anexo_match else None
+    anexo_content_start = anexo_match.end() if anexo_match else None
+
+    # Extract summary
+    if sum_start:
+        next_start = text_start if text_start else (anexo_start if anexo_start else len(segment_text))
+        result["summary"] = segment_text[sum_start:next_start].strip()
+
+    # Extract texto
+    if text_content_start:
+        next_start = anexo_start if anexo_start else len(segment_text)
+        result["texto"] = segment_text[text_content_start:next_start].strip()
+
+    # Extract anexo
+    if anexo_content_start:
+        result["anexo"] = segment_text[anexo_content_start:].strip()
+
+    return result
