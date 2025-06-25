@@ -114,7 +114,7 @@ PRIMARY_PATTERNS = [
    {
     "label": "SECRETARIA",
     "pattern": [
-        {"TEXT": {"IN": ["PRESIDÊNCIA", "SECRETARIA", "CÂMARA", "VICE"]}},
+        {"IS_UPPER": True, "OP": "+"},
         {"TEXT": "-", "OP": "?"},
         {"IS_UPPER": True, "OP": "+"},
         {"IS_SPACE": True, "OP": "*"},
@@ -123,6 +123,7 @@ PRIMARY_PATTERNS = [
         {"IS_UPPER": True, "OP": "+"},
     ]
 }
+
 
 
 
