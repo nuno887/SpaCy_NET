@@ -3,60 +3,125 @@ import os
 
 def extract_text_from_pdf(input_dir: str, output_dir: str, column_split_ratio: float = 0.4) -> None:
     """
-    Extracts text from PDFs using PyMuPDF with sorting for two-column layouts.
-    Skips last page. Supports adjustable column split ratio.
+    Processes all PDFs in input_dir and saves extracted text to output_dir.
     """
     os.makedirs(output_dir, exist_ok=True)
 
     for filename in os.listdir(input_dir):
-        if filename.lower().endswith(".pdf"):
-            base = os.path.splitext(filename)[0]
-            out_path = os.path.join(output_dir, base + ".txt")
+        if not filename.lower().endswith(".pdf"):
+            continue
 
-            if os.path.exists(out_path):
+        base = os.path.splitext(filename)[0]
+        out_path = os.path.join(output_dir, base + ".txt")
+
+        if os.path.exists(out_path):
+            continue
+
+        full_text = extract_text_from_single_pdf(os.path.join(input_dir, filename), column_split_ratio)
+
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(full_text)
+
+        print(f"✅ Saved to: {out_path}")
+
+
+
+def split_pdf_in_memory(input_path: str) -> list:
+    doc = fitz.open(input_path)
+    pages = []
+
+    for i in range(len(doc)):
+        single_page_doc = fitz.open()
+        single_page_doc.insert_pdf(doc, from_page=i, to_page=i)
+        pages.append(single_page_doc)
+
+    doc.close()
+    return pages
+
+
+def extract_single_column_page(page) -> str:
+    """Extracts plain text from a single-column page."""
+    return page.get_text().strip()
+
+
+def extract_two_column_page(page, column_split_ratio: float = 0.4) -> str:
+    """Extracts text from a two-column page: left side first, then right side."""
+    mid_x = page.rect.width * column_split_ratio
+    left_lines = []
+    right_lines = []
+
+    for block in page.get_text("dict")["blocks"]:
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            if not spans:
                 continue
 
-            doc = fitz.open(os.path.join(input_dir, filename))
-            extracted_text = []
+            x0 = min(span["bbox"][0] for span in spans)
+            y0 = round(line["bbox"][1], 1)
+            text = "".join(span["text"] for span in spans).strip()
 
-            total_pages = len(doc)
+            if not text:
+                continue
 
-            for i, page in enumerate(doc):
-                if i == total_pages - 1:
-                    continue
+            if x0 < mid_x:
+                left_lines.append((y0, x0, text))
+            else:
+                right_lines.append((y0, x0, text))
 
-                mid_x = page.rect.width * column_split_ratio
-                left_lines = []
-                right_lines = []
+    left_lines.sort(key=lambda l: (l[0], l[1]))
+    right_lines.sort(key=lambda l: (l[0], l[1]))
 
-                text_dict = page.get_text("dict")
+    ordered_text = [text for _, _, text in left_lines] + [text for _, _, text in right_lines]
+    return "\n".join(ordered_text)
 
-                for block in text_dict["blocks"]:
-                    for line in block.get("lines", []):
-                        x0s = [span["bbox"][0] for span in line["spans"]]
-                        x0 = min(x0s)
-                        y0 = round(line["bbox"][1], 1)
 
-                        line_text = "".join(span["text"] for span in line["spans"]).strip()
-                        if not line_text or line_text.isspace():
-                            continue
+def detect_page_columns(page, column_split_ratio: float = 0.4, threshold_ratio: float = 0.75) -> str:
+    """Detects if the page is single or double column based on x0 positions."""
+    left_count = 0
+    right_count = 0
+    mid_x = page.rect.width * column_split_ratio
 
-                        if x0 < mid_x:
-                            left_lines.append((y0, x0, line_text))
-                        else:
-                            right_lines.append((y0, x0, line_text))
+    for block in page.get_text("dict")["blocks"]:
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            if not spans:
+                continue
 
-                left_lines.sort(key=lambda l: (l[0], l[1]))
-                right_lines.sort(key=lambda l: (l[0], l[1]))
+            x0 = min(span["bbox"][0] for span in spans)
 
-                ordered_text = [text for _, _, text in left_lines] + [text for _, _, text in right_lines]
+            if x0 < mid_x:
+                left_count += 1
+            else:
+                right_count += 1
 
-                extracted_text.append("\n".join(ordered_text))
+    total = left_count + right_count
+    if total == 0:
+        return "single"
 
-            full_text = "\n".join(extracted_text).strip()
+    left_ratio = left_count / total
+    return "double" if left_ratio < threshold_ratio else "single"
 
-            with open(out_path, "w", encoding="utf-8") as f:
-                f.write(full_text)
+def extract_text_from_single_pdf(input_path: str, column_split_ratio: float = 0.4) -> str:
+    """
+    Extracts text from a single PDF:
+      - First page as single-column
+      - Remaining pages auto-detect columns
+    """
+    extracted_text = []
+    pages = split_pdf_in_memory(input_path)
 
-            doc.close()
-            print(f"✅ Saved to: {out_path}")
+    for i, page_doc in enumerate(pages):
+        page = page_doc[0]
+
+        if i == 0:
+            text = extract_single_column_page(page)
+        else:
+            layout = detect_page_columns(page, column_split_ratio)
+            if layout == "double":
+                text = extract_two_column_page(page, column_split_ratio)
+            else:
+                text = extract_single_column_page(page)
+
+        extracted_text.append(text.strip())
+
+    return "\n".join(extracted_text).strip()
