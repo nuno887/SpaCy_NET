@@ -26,27 +26,35 @@ def get_nlp():
 
 def extract_all_despachos(doc, filename, folder_path) -> list:
     results = []
-    seen_despachos = set()
     current_secretaria = None
+    first_despacho = None
+    second_occurrence_index = None
 
     des_ents = [ent for ent in doc.ents if ent.label_ == "DES"]
     secretaria_ents = [ent for ent in doc.ents if ent.label_ == "SECRETARIA"]
     all_ents = sorted(secretaria_ents + des_ents, key=lambda x: x.start)
 
-    for i, ent in enumerate(all_ents):
+    # Detecta primeira e segunda ocorrência
+    for ent in all_ents:
+        if ent.label_ == "DES":
+            if first_despacho is None:
+                first_despacho = ent.text.replace("\n", "").strip()
+            elif ent.text.replace("\n", "").strip() == first_despacho:
+                second_occurrence_index = ent.start
+                break
+
+    # Limita as entidades ao ponto de corte
+    filtered_ents = [ent for ent in all_ents if second_occurrence_index is None or ent.start < second_occurrence_index]
+
+    for i, ent in enumerate(filtered_ents):
         if ent.label_ == "SECRETARIA":
             current_secretaria = ent.text.replace("\n", " ").strip()
 
         elif ent.label_ == "DES" and current_secretaria:
             despacho_text = ent.text.replace("\n", "").strip()
 
-            if despacho_text in seen_despachos:
-                continue  # Skip duplicates
-
-            seen_despachos.add(despacho_text)
-
             start = ent.start
-            end = all_ents[i + 1].start if i + 1 < len(all_ents) else len(doc)
+            end = filtered_ents[i + 1].start if i + 1 < len(filtered_ents) else len(doc)
             chunk = doc[start:end].text.replace(current_secretaria, "").strip()
 
             record = {
@@ -61,4 +69,5 @@ def extract_all_despachos(doc, filename, folder_path) -> list:
             results.append(record)
 
     return results
+
 
