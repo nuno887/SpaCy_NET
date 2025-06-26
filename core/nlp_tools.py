@@ -71,3 +71,12 @@ def extract_all_despachos(doc, filename, folder_path) -> list:
     return results
 
 
+def has_despacho(text: str) -> bool:
+    """
+    Processa o texto com SpaCy e verifica se existe pelo menos uma entidade 'DES'.
+    Retorna True se existir, False caso contrário.
+    """
+    nlp = get_nlp()
+    doc = nlp(text)
+
+    return any(ent.label_ == "DES" for ent in doc.ents)

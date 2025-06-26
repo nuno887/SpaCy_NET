@@ -11,11 +11,11 @@ PRIMARY_PATTERNS = [
     "label": "DES",
     "pattern": [
         {   # header must start the sentence / line
-            "LOWER": {"IN": ["despacho", "aviso", "declaração", "edital", "deliberação", "contrato"]}
+            "LOWER": {"IN": ["despacho", "aviso", "declaração", "edital", "deliberação", "contrato", "resolução", "revogação", "caducidade", "ato"]}
         },
         {   # optional words between the header and “n.º”
             "LOWER": {"IN": ["conjunto", "de", "da", "do",
-                             "retificação", "retificacao"]},
+                             "retificação", "retificacao", "societário"]},
             "OP": "*"
         },
         {   # mandatory “n.º” (or “nº”)

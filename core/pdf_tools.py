@@ -125,3 +125,29 @@ def extract_text_from_single_pdf(input_path: str, column_split_ratio: float = 0.
         extracted_text.append(text.strip())
 
     return "\n".join(extracted_text).strip()
+
+
+
+def extract_first_page_to_txt(pdf_path: str, output_dir: str) -> str:
+    """
+    Extracts only the first page of the given PDF to a .txt file in output_dir.
+    
+    Returns the path to the created .txt file.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    filename = os.path.splitext(os.path.basename(pdf_path))[0]
+    txt_path = os.path.join(output_dir, f"{filename}.txt")
+
+    doc = fitz.open(pdf_path)
+    if doc.page_count == 0:
+        print(f"⚠️ {filename} is empty, skipping.")
+        return ""
+
+    first_page_text = doc[0].get_text()
+    doc.close()
+
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write(first_page_text.strip())
+
+    print(f"✅ Saved first page to {txt_path}")
+    return txt_path
